@@ -1,0 +1,73 @@
+name: CI — build & run (Makefile)
+
+# Запускать:
+# - при push в ветку ci_test (быстрая проверка при пуше туда)
+# - при pull_request в master (проверка передмердж)
+on:
+  push:
+    branches: [ "ci_test" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-and-run:
+    name: Build & Run (Makefile)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show workspace (debug)
+        run: |
+          echo "WORKSPACE = $(pwd)"
+          echo "Files:"
+          ls -la
+        shell: bash
+
+      # ---------------------------
+      # Linux runner
+      # ---------------------------
+      - name: Setup toolchain (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential make
+          make clean || true
+          make build
+          echo "=== ensure input exists ==="
+          if [ ! -f input.txt ]; then
+            echo "ERROR: input.txt not found in repository root"; exit 2;
+          fi
+          echo "=== RUN ==="
+          # запуск без интерактивности; перенаправляем stdin из input.txt
+          ./bin/app < input.txt
+        shell: bash
+
+      # ---------------------------
+      # Windows runner (MSYS2)
+      # ---------------------------
+      - name: Setup MSYS2 (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: msys2/setup-msys2@v3
+        with:
+          msystem: MINGW64
+          update: true
+
+      - name: Install toolchain & build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pacman -S --noconfirm --needed mingw-w64-x86_64-toolchain make
+          export PATH="/mingw64/bin:$PATH"
+          make clean || true
+          make build
+          echo "=== ensure input exists ==="
+          if [ ! -f input.txt ]; then
+            echo "ERROR: input.txt not found in repository root"; exit 2;
+          fi
+          echo "=== RUN ==="
+          ./bin/app.exe < input.txt
+        shell: bash

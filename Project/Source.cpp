@@ -8,9 +8,7 @@ double solver(std::string line)
 {
 
 	std::vector<double> numbers{};
-	std::vector<char> all_types_operator{ '/', '+', '-', '*' };
-
-	std::string tek;
+	std::string tek = "";
 
 	for (char s : line)
 	{
@@ -51,6 +49,8 @@ double solver(std::string line)
 				}
 			}
 		}
+
+
 	}
 
 	std::cout << numbers[0] << std::endl;
@@ -62,12 +62,14 @@ double solver(std::string line)
 
 int main(int argc, char* argv[])
 {
+
 	std::string line;
 
 	std::ifstream open_file("input.txt");
 	std::ofstream out("output.txt", std::ios::trunc);
 	if (open_file.is_open())
 	{
+		//std::cout << "Работает" << std::endl;
 		while (std::getline(open_file, line))
 		{
 			std::cout << line << std::endl;
