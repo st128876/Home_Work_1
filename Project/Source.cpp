@@ -69,7 +69,6 @@ int main(int argc, char* argv[])
 	std::ofstream out("output.txt", std::ios::trunc);
 	if (open_file.is_open())
 	{
-		//std::cout << "Работает" << std::endl;
 		while (std::getline(open_file, line))
 		{
 			std::cout << line << std::endl;
