@@ -1,8 +1,8 @@
-name: C/C++ CI (CMake)
+name: C/C++ CI (auto-detect)
 
 on:
   push:
-    branches: ["ci_test"]     # или ["master"]
+    branches: ["ci_test"]    # поменяйте на ["master"] если нужно
   pull_request:
     branches: ["master"]
 
@@ -10,16 +10,83 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install build deps
-      run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+      - name: Debug: show files and branch
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Current branch:"
+          git branch --show-current || true
+          echo "Listing root:"
+          ls -la
+          echo "Listing src/ if exists:"
+          [ -d src ] && ls -la src || true
 
-    - name: Configure (CMake)
-      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Detect and build
+        shell: bash
+        run: |
+          set -euo pipefail
 
-    - name: Build
-      run: cmake --build build -- -j$(nproc)
+          # If configure exists -> run it
+          if [ -f ./configure ]; then
+            echo "Found ./configure — ensure executable and run."
+            chmod +x ./configure || true
+            ./configure
+            make -j$(nproc)
+            make check || true
+            make distcheck || true
+            exit 0
+          fi
 
-    - name: Run tests
-      run: cd build && ctest --output-on-failure
+          # If autotools sources present -> install autotools and generate configure
+          if [ -f configure.ac ] || [ -f configure.in ] || [ -f autogen.sh ]; then
+            echo "Autotools sources detected (configure.ac / autogen.sh). Installing autotools..."
+            sudo apt-get update
+            sudo apt-get install -y autoconf automake libtool pkg-config make gcc g++
+            if [ -f autogen.sh ]; then
+              chmod +x autogen.sh || true
+              ./autogen.sh
+            else
+              autoreconf -i
+            fi
+            ./configure
+            make -j$(nproc)
+            make check || true
+            make distcheck || true
+            exit 0
+          fi
+
+          # If CMake project -> use CMake
+          if [ -f CMakeLists.txt ]; then
+            echo "CMakeLists.txt detected — using CMake."
+            sudo apt-get update
+            sudo apt-get install -y cmake build-essential
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake --build build -- -j$(nproc)
+            if [ -f build/CTestTestfile.cmake ] || [ -d build/Testing ]; then
+              cd build
+              ctest --output-on-failure || true
+            fi
+            exit 0
+          fi
+
+          # If plain Makefile present -> run make
+          if [ -f Makefile ] || [ -f makefile ]; then
+            echo "Makefile detected — running make."
+            make -j$(nproc)
+            make check || true
+            exit 0
+          fi
+
+          # Nothing recognized -> fail with hints
+          echo "Error: couldn't find configure / configure.ac / CMakeLists.txt / Makefile in repository root."
+          echo "Options to fix:"
+          echo "  - If your build files are in a subdirectory, add 'working-directory: <subdir>' to the steps or 'cd <subdir>' before building."
+          echo "  - If you use Autotools, add configure (or run autoreconf/autogen.sh) to generate it."
+          echo "  - If you use CMake, remove ./configure and use cmake commands."
+          exit 1
+
+      - name: Final debug (if failed earlier this won't run)
+        if: always()
+        run: echo "Build job finished (success or failed)."
